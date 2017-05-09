@@ -1,0 +1,105 @@
+<?php
+/**
+ * Implements hook_form_alter
+ */
+/* Validate SKU */
+function royalshop_custom_module_form_alter(&$form, &$form_state, $form_id) {
+  // Unique SKU check
+  if ($form_id == 'product_node_form') {
+  	/* Check whether adding a New Node/Product or updating existing Node/product*/
+  	$nid = $form_state['node']->nid;
+  	if (!isset($nid)) {
+  		$form['#validate'][] = 'unique_sku_validate';
+  	}
+  }
+  if ($form_id == 'uc_cart_checkout_form') {
+  /* Check if the total price is less than minimum checkout amount */
+    if($form_state['storage']['order']->order_total<=3000){
+      drupal_set_message('Your minimum order amount must be 3,000 Kyats. Please add more to your shopping cart. Thank you !!!','warning');
+      drupal_set_message('သင်၏မှာယူမှုအတွက်အနည်းဆုံး တန်ဖိုး ၃,ဝဝဝ ကျပ်နှင့်အထက်ဖြစ်ရပါမည်။ သင်၏ စျေးဝယ်ချင်းသို့ထပ်မံ ဖြည့်တင်းပေးပါရန် မေတ္တာရပ်ခံအပ်ပါသည်။','warning');
+      /*drupal_goto(cart);*/
+    }
+  }
+}
+ 
+function unique_sku_validate($form, $form_state) {
+  $nid = $form_state['values']['nid'];
+  $current_skus = array();
+  $this_skus = array();
+  $sql = "SELECT nid, model FROM uc_products";
+  $result = db_query($sql);
+  foreach ($result as $row) {
+    if ($row->nid != $form_state['values']['nid']) {
+      $current_skus[] = $row->model;
+    } else {
+      $this_skus[] = $row->model;
+    }
+  }
+
+  $has_error = FALSE;
+  // $user_inputs = array();
+  // $sku = array();
+    $sku = $form_state['values']['model'];
+    if(in_array($form_state['values']['model'], $current_skus)) {
+      // $message .= $form_state['values']['model'] . '; ';
+      $message = "SKU value '".$sku."' already exists. Pleae enter new SKU value.";
+      // $user_inputs[] = $sku['model'];
+      $has_error = TRUE;
+    }
+ 
+  // Show error if SKUs already exist in DB
+  if ($has_error) {
+    form_set_error('body', $message);
+  }
+   
+  // Show error if the user inputs have duplicated entries
+  if (has_dupes($this_skus)) { 
+    form_set_error('body', "Duplicated entries.");
+  }
+}
+ 
+function has_dupes($array) {
+  $dupe_array = array();
+  foreach($array as $val){
+    if(++$dupe_array[$val] > 1){
+      return true;
+    }
+  }
+  return false;
+}
+
+/* End Validate SKU */
+
+/* Add Extra Weight Column in Cart and Checkout Pages*/
+function royalshop_custom_module_form_uc_cart_view_form_alter(&$form, &$form_state) {
+  
+  $form['items']['#columns']['total']['weight'] = 6;
+  $form['items']['#columns']['qty']['weight'] = 5;
+
+  $form['items']['#columns']['price'] = array(
+      'cell' => t('Price'), 
+      'weight' => 4,
+  );
+  $form['items']['#columns']['weight'] = array(
+      'cell' => t('Weight'), 
+      'weight' => 3,
+  );
+  
+  $form['items']['#columns']['remove']['weight'] = 0;
+}
+function royalshop_custom_module_tapir_table_alter(&$table, $table_id) {
+  if ($table_id == 'uc_cart_view_table') {
+    foreach (element_children($table) as $key) {
+      if (!empty($table['#parameters'][1][$key]['nid'])) {
+        $node = node_load($table['#parameters'][1][$key]['nid']['#value']);
+        $table[$key]['price'] = array(
+          '#markup' => theme('uc_product_price',array('element' => array('#value' => $node->sell_price))),
+        );
+        $table[$key]['weight'] = array(
+          '#markup' => $node->weight." ".$node->weight_units,
+        );
+      }
+    }
+  }
+}
+/* End Add Extra Weight Column in Cart and Checkout Pages*/
